@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>HWiNFO Telemetry Analyzer | Majidtech</title>
+  <meta name="description" content="Visualisasi dan analisis log CSV HWiNFO client-side dengan Chart.js, statistik Min/Max/Average, dan pendeteksi thermal throttling.">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Preconnect to Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- External CDN Dependencies: Chart.js & PapaParse -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+
+  <!-- Fixed Ambient Radial Mesh Background -->
+  <div class="ambient-glow-bg" aria-hidden="true"></div>
+
+  <!-- Loading State Overlay -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner-ring"></div>
+    <div id="loading-text" style="font-size: 0.875rem; font-weight: 600; color: #ffffff; letter-spacing: 0.05em;">Memproses log HWiNFO...</div>
+  </div>
+
+  <!-- Main Application Container -->
+  <div class="app-container" id="app-container">
+
+    <!-- Floating Island Navigation Bar -->
+    <header class="header-island" id="header-island">
+      <div class="brand-wrapper">
+        <div class="brand-logo-badge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <span class="brand-name" data-i18n="brandTitle">HWiNFO Analyzer</span>
+          <span class="brand-tag" data-i18n="brandTag">Majidtech Telemetry Suite</span>
+        </div>
+      </div>
+
+      <div class="session-badge" id="session-badge" style="display: none;">
+        <span class="pulse-dot"></span>
+        <span id="session-info-text">Session Active</span>
+      </div>
+
+      <div class="header-actions">
+        <!-- Bilingual Language Switcher Button -->
+        <button class="btn-lang-toggle" id="lang-toggle-btn" aria-label="Ganti Bahasa (ID/EN)" title="Ganti Bahasa / Switch Language" data-i18n-title="langToggleTitle">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <span class="lang-code-badge" id="lang-code-text">ID</span>
+        </button>
+
+        <!-- Theme Toggle Button -->
+        <button class="btn-theme-toggle" id="theme-toggle-btn" aria-label="Ganti Tema (Gelap/Terang)" title="Ganti Tema" data-i18n-title="themeToggleTitle">
+          <span class="theme-icon-dark" id="theme-icon-dark">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </span>
+          <span class="theme-icon-light" id="theme-icon-light" style="display: none;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/>
+              <line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          </span>
+        </button>
+
+        <!-- Header Action Buttons -->
+        <button class="btn-nested btn-nested-secondary" id="btn-open-compare" style="display: none;" title="Komparasi Multi-Grafik">
+          <span class="btn-text" data-i18n="navCompare">Komparasi</span>
+          <span class="btn-icon-wrapper">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 20V10M12 20V4M6 20v-6"/>
+            </svg>
+          </span>
+        </button>
+
+        <button class="btn-nested btn-nested-secondary" id="btn-reset-file" style="display: none;" title="Upload File Baru">
+          <span class="btn-text" data-i18n="navChangeFile">Ganti File</span>
+          <span class="btn-icon-wrapper">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v5"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Upload Hero View (Initial State) -->
+    <section class="hero-upload-section" id="upload-section">
+      <div class="hero-eyebrow">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        <span data-i18n="heroEyebrow">Engine Telemetri Presisi Tinggi</span>
+      </div>
+
+      <h1 class="hero-title" data-i18n="heroTitle">Visualisasi & Analisis Log HWiNFO</h1>
+      <p class="hero-subtitle" data-i18n="heroSubtitle">
+        Buka log CSV HWiNFO untuk menganalisis ratusan sensor hardware, grafik responsif per variabel, statistik Min/Max/Average, dan deteksi limit suhu.
+      </p>
+
+      <!-- Double-Bezel Dropzone -->
+      <div class="double-bezel-shell dropzone-outer">
+        <div class="double-bezel-core dropzone-inner" id="dropzone-inner">
+          <div class="dropzone-icon-box">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+
+          <h3 class="dropzone-heading" data-i18n="dropHeading">Tarik & Letakkan File CSV HWiNFO di Sini</h3>
+          <p class="dropzone-subtext" data-i18n="dropSubtext">Mendukung format ekspor HWiNFO standar (Date, Time, Sensor Units, encoding windows-1252)</p>
+
+          <div class="dropzone-actions">
+            <button class="btn-nested btn-nested-primary" id="btn-select-file">
+              <span data-i18n="btnSelectFile">Pilih File CSV</span>
+              <span class="btn-icon-wrapper">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </span>
+            </button>
+          </div>
+
+          <input type="file" id="file-input" accept=".csv" style="display: none;">
+        </div>
+      </div>
+    </section>
+
+    <!-- Dashboard View (Shown after file parse) -->
+    <main class="dashboard-section" id="dashboard-section" style="display: none;">
+
+      <!-- Executive Bento Highlights Grid -->
+      <section class="bento-overview-section" id="bento-highlights">
+        <!-- Rendered dynamically by app.js -->
+      </section>
+
+      <!-- Sticky Filter & Sub-Nav Bar -->
+      <nav class="controls-bar" aria-label="Kategori dan Filter Sensor">
+        <div class="category-nav-shell" id="category-nav-shell">
+          <button class="tabs-nav-arrow tabs-nav-prev" id="tabs-prev-btn" aria-label="Scroll Kategori ke Kiri" title="Scroll kategori ke kiri" data-i18n-title="tabsScrollPrev" tabindex="-1">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+
+          <div class="category-tabs-wrapper" id="category-tabs-container">
+            <!-- Rendered dynamically by app.js -->
+          </div>
+
+          <button class="tabs-nav-arrow tabs-nav-next" id="tabs-next-btn" aria-label="Scroll Kategori ke Kanan" title="Scroll kategori ke kanan" data-i18n-title="tabsScrollNext" tabindex="-1">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <div class="search-and-actions">
+          <div class="search-input-shell">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="search-input" placeholder="Cari sensor (e.g. CPU, Temp, FPS)..." data-i18n-placeholder="searchPlaceholder" autocomplete="off" spellcheck="false">
+            <button id="btn-clear-search" style="display: none; background: transparent; border: none; color: var(--text-tertiary); cursor: pointer; padding: 0;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <span id="results-count-text" style="font-size: 0.75rem; color: var(--text-tertiary); font-family: var(--font-mono); white-space: nowrap;">-</span>
+        </div>
+      </nav>
+
+      <!-- Telemetry Cards Grid -->
+      <section class="telemetry-grid" id="telemetry-grid">
+        <!-- Telemetry Cards populated dynamically -->
+      </section>
+
+    </main>
+
+    <!-- High-End Structural Footer (Double-Bezel Architecture) -->
+    <footer class="app-footer double-bezel-shell">
+      <div class="double-bezel-core footer-core">
+        <div class="footer-grid">
+          <!-- Brand & Architecture Column -->
+          <div class="footer-col footer-col-brand">
+            <div class="footer-brand-header">
+              <div class="brand-logo-badge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+              </div>
+              <div>
+                <span class="footer-brand-title" data-i18n="footerBrandTitle">HWiNFO Analyzer</span>
+                <span class="footer-brand-subtitle" data-i18n="footerBrandSubtitle">Majidtech Telemetry Suite</span>
+              </div>
+            </div>
+            <p class="footer-desc" data-i18n="footerDesc">
+              Visualisasi dan analisis log telemetri hardware presisi tinggi berbasis peramban web. Memproses ratusan sensor time-series secara instan, aman, dan tanpa ketergantungan server luar.
+            </p>
+          </div>
+
+          <!-- Privacy & Execution -->
+          <div class="footer-col">
+            <h4 class="footer-heading" data-i18n="footerHeadingPrivacy">Privasi & Eksekusi</h4>
+            <ul class="footer-links">
+              <li>
+                <span class="footer-pill-tag">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span data-i18n="footerTagClientSide">100% Client-Side</span>
+                </span>
+              </li>
+              <li><span data-i18n="footerTagZeroIngestion">Zero Server Ingestion</span></li>
+              <li><span data-i18n="footerTagFileReader">Local FileReader API</span></li>
+              <li><span data-i18n="footerTagDecoder">Windows-1252 ANSI Decoder</span></li>
+            </ul>
+          </div>
+
+          <!-- Core Technologies -->
+          <div class="footer-col">
+            <h4 class="footer-heading" data-i18n="footerHeadingTech">Teknologi & Engine</h4>
+            <ul class="footer-links">
+              <li><span data-i18n="footerTagChartjs">Chart.js v4 (Canvas 60fps)</span></li>
+              <li><span data-i18n="footerTagPapaparse">PapaParse (Streaming Parser)</span></li>
+              <li><span data-i18n="footerTagObserver">IntersectionObserver Lazy Load</span></li>
+              <li><span data-i18n="footerTagMultiaxis">Multi-Axis Synchronized Scaling</span></li>
+            </ul>
+          </div>
+
+          <!-- Compatibility -->
+          <div class="footer-col">
+            <h4 class="footer-heading" data-i18n="footerHeadingCompat">Kompatibilitas</h4>
+            <ul class="footer-links">
+              <li><span data-i18n="footerTagHwinfoVersions">HWiNFO v6 / v7 / v8</span></li>
+              <li><span data-i18n="footerTagCsvExport">Sensor-only CSV Export</span></li>
+              <li><span data-i18n="footerTagPresentMon">PresentMon Frame Times</span></li>
+              <li><span data-i18n="footerTagSensorsDts">DTS & Enhanced CPU Sensors</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Footer Bottom Bar -->
+        <div class="footer-bottom-row">
+          <div class="footer-copyright" data-i18n="footerCopyright">
+            &copy; 2026 Majidtech. Dikembangkan untuk analisis hardware presisi tinggi.
+          </div>
+
+          <div class="footer-status-indicator">
+            <span class="pulse-dot"></span>
+            <span data-i18n="footerEngineStatus">Client-Side Engine Active &bull; Zero Server Latency</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Multi-Variable Comparison Modal -->
+  <div class="modal-backdrop" id="compare-modal">
+    <div class="double-bezel-shell modal-window-shell">
+      <div class="double-bezel-core modal-window-core">
+        <div class="modal-header">
+          <div>
+            <h2 class="modal-title" data-i18n="modalTitle">Komparasi Multi-Variabel</h2>
+            <p style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 0.25rem;" data-i18n="modalDesc">
+              Pilih hingga 5 variabel untuk dioverlay secara tersinkronisasi pada sumbu multi-aksis.
+            </p>
+          </div>
+          <button class="modal-close-btn" id="btn-close-modal" aria-label="Tutup Modal" data-i18n-title="modalCloseLabel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- Selected / Quick Toggle Chips -->
+        <div class="selector-pills-row" id="compare-pills-container">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Comparison Chart Canvas -->
+        <div class="modal-chart-container">
+          <canvas id="compare-canvas"></canvas>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button class="btn-nested btn-nested-primary" id="btn-export-compare-png">
+            <span data-i18n="btnExportComparePng">Export PNG Komparasi</span>
+            <span class="btn-icon-wrapper">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Logic Modules -->
+  <script src="js/i18n.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/categories.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
